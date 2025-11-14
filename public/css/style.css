@@ -1,0 +1,47 @@
+/* Custom styles */
+body {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+.card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.btn {
+    transition: all 0.2s;
+}
+
+.btn:active {
+    transform: translateY(1px);
+}
+
+/* Exercise card styles */
+.exercise-card {
+    height: 100%;
+}
+
+.badge {
+    font-size: 0.9em;
+    padding: 0.5em 1em;
+}
+
+/* Container list styles */
+.list-group-item {
+    transition: background-color 0.2s;
+}
+
+.list-group-item:hover {
+    background-color: #f8f9fa;
+}
+
+/* Error message styles */
+.alert {
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+} 

@@ -1,0 +1,36 @@
+# JavaScript Analysis Lab
+
+This is a training exercise for application security testers to practice JavaScript analysis and browser developer tools usage. The application implements a "secure" input processor with client-side validation and transformation.
+
+## Setup
+
+1. Install dependencies:
+```bash
+npm install
+```
+
+2. Start the server:
+```bash
+npm start
+```
+
+3. Access the application at `http://localhost:3000`
+
+## Challenge
+
+The goal is to analyze the client-side JavaScript code and understand:
+1. How the input validation works
+2. What transformations are applied to the input
+3. How the data is sent to the server
+4. What processing happens on the server side
+5. Potential security vulnerabilities in the implementation
+
+### Hints
+- Use browser developer tools to inspect network requests
+- Analyze the JavaScript code transformation functions
+- Look for ways to bypass client-side validation
+- Consider what happens to the transformed data on the server
+
+## Security Notes
+
+This application is intentionally designed with certain security flaws for educational purposes. Do not use any of this code in a production environment. 

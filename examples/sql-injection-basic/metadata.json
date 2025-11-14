@@ -1,0 +1,18 @@
+{
+    "title": "SQL Injection Basic",
+    "version": "1.0.0",
+    "description": "Learn to identify and exploit basic SQL injection vulnerabilities in a web application. This exercise teaches fundamental SQL injection concepts and prevention techniques.",
+    "level": "beginner",
+    "goals": [
+        {
+            "id": "auth_bypass",
+            "description": "Bypass the login authentication using SQL injection",
+            "hint": "Try manipulating the login form's input to alter the SQL query logic"
+        },
+        {
+            "id": "data_extract",
+            "description": "Extract hidden user data from the database",
+            "hint": "Once logged in, look for ways to modify SQL queries in the user interface"
+        }
+    ]
+} 

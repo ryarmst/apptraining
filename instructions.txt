@@ -1,0 +1,101 @@
+# Security Training Platform Setup Instructions
+
+## Prerequisites
+- Node.js 18+ and npm
+- Docker
+- SSL certificates
+
+## SSL Certificate Setup (Recommended)
+1. Create SSL group and add user:
+   ```
+   sudo groupadd sslcerts
+   sudo usermod -a -G sslcerts $USER
+   ```
+
+2. Set up certificate directories:
+   ```
+   sudo mkdir -p /etc/ssl/private/apptraining
+   sudo mkdir -p /etc/ssl/certs/apptraining
+   ```
+
+3. Copy certificates:
+   ```
+   sudo cp your-cert.pem /etc/ssl/certs/apptraining/apptraining.pem
+   sudo cp your-key.key /etc/ssl/private/apptraining/apptraining.key
+   ```
+
+4. Set secure permissions:
+   ```
+   sudo chown -R root:sslcerts /etc/ssl/certs/apptraining /etc/ssl/private/apptraining
+   sudo chmod 750 /etc/ssl/certs/apptraining /etc/ssl/private/apptraining
+   sudo chmod 640 /etc/ssl/certs/apptraining/apptraining.pem /etc/ssl/private/apptraining/apptraining.key
+   ```
+
+5. Log out and log back in for group changes to take effect
+
+## Initial Setup
+1. Install backend dependencies:
+   ```
+   npm install
+   ```
+
+2. Install and build frontend:
+   ```
+   cd frontend
+   npm install
+   npm run build:prod
+   cd ..
+   ```
+
+3. Create environment file:
+   ```
+   cp .env.example .env
+   ```
+   Edit .env with your configuration:
+   - Session secret
+   - Ports
+   - Certificate paths:
+     ```
+     SSL_CERT_PATH=/etc/ssl/certs/apptraining/apptraining.pem
+     SSL_KEY_PATH=/etc/ssl/private/apptraining/apptraining.key
+     ```
+
+## Running the Application
+1. Start the server:
+   ```
+   node src/server.js
+   ```
+   Note: With proper certificate permissions, sudo is not required
+
+2. Access the application:
+   - Main interface: https://apptraining.dbg.local
+   - Exercise containers: https://[uuid].apptraining.dbg.local
+
+## Development
+1. Start the frontend development server (for active development):
+   ```
+   cd frontend
+   npm run dev
+   ```
+   This will run a local dev server with hot reloading at http://localhost:5173
+
+2. When ready to deploy frontend changes:
+   ```
+   cd frontend
+   npm run build:prod
+   ```
+   This command will:
+   - Build the frontend (`npm run build`)
+   - Automatically copy the built files to the public directory
+
+3. Development workflow:
+   - Make changes to frontend code
+   - Test changes using the dev server (`npm run dev`)
+   - Once satisfied, build and deploy using `npm run build:prod`
+   - Restart the main server if necessary
+
+## Security Notes
+- Keep SSL certificates and keys secure
+- Never commit .env file or SSL certificates to version control
+- Regularly update dependencies
+- Monitor Docker container security 

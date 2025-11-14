@@ -1,0 +1,92 @@
+# Creating Lab Exercises for Security Training Platform
+
+## Lab Exercise Structure
+```
+exercise_name/
+├── Dockerfile
+├── src/                  # Application source code
+├── config/              # Configuration files
+├── solution/            # Solution guide (optional)
+└── metadata.json        # Exercise metadata
+```
+
+## metadata.json Example
+```json
+{
+    "name": "SQL Injection Basic",
+    "description": "Learn to identify and exploit basic SQL injection vulnerabilities",
+    "level": 1,
+    "category": "web",
+    "port": 8080,
+    "hints": [
+        "Try using single quotes in the input",
+        "What happens if you add OR 1=1?"
+    ]
+}
+```
+
+## Dockerfile Requirements
+1. Base your image on a stable version:
+   ```dockerfile
+   FROM node:18-alpine
+   # or
+   FROM python:3.11-slim
+   ```
+
+2. Expose the port specified in metadata.json:
+   ```dockerfile
+   EXPOSE 8080
+   ```
+
+3. Use a non-root user:
+   ```dockerfile
+   RUN adduser -D appuser
+   USER appuser
+   ```
+
+4. Set a health check:
+   ```dockerfile
+   HEALTHCHECK --interval=30s --timeout=3s \
+     CMD curl -f http://localhost:8080/ || exit 1
+   ```
+
+## Building and Testing
+1. Build the image:
+   ```bash
+   cd exercise_name
+   docker build -t exercise_name .
+   ```
+
+2. Test locally:
+   ```bash
+   docker run -p 8080:8080 exercise_name
+   ```
+
+## Packaging for Upload
+1. Save the image:
+   ```bash
+   docker save exercise_name > exercise_name.tar
+   ```
+
+2. Create exercise package:
+   ```bash
+   tar -czf exercise_name.tgz exercise_name.tar metadata.json solution/
+   ```
+
+## Best Practices
+- Keep images small and focused
+- Include clear success conditions
+- Document any special setup requirements
+- Test the exercise thoroughly
+- Include helpful error messages
+- Provide progressive hints
+- Ensure all vulnerabilities are intentional
+- Remove debugging tools and unnecessary packages
+
+## Security Guidelines
+- Don't include sensitive data
+- Limit container capabilities
+- Use read-only file systems where possible
+- Don't require privileged mode
+- Keep dependencies up-to-date
+- Document any intentional vulnerabilities 

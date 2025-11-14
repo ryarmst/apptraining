@@ -1,0 +1,18 @@
+{
+    "title": "JavaScript Analysis Lab",
+    "version": "1.0.1",
+    "description": "The intent of this lab is to practice JavaScript analysis and automation of client-side functionality. The client-side code in this scenario modifies input data before sending it to the server. There are two tasks to complete. First, identify a quick way to inject arbitrary data into the field. Next identify an approach that will allow you to use Burp's scanner against the input pre-encoded, ensuring scan payloads are ultimately encoded properly and parsed by the server.",
+    "level": "beginner",
+    "goals": [
+        {
+            "id": "goal_1",
+            "description": "Bypass client-side validation to inject manual payloads",
+            "hint": "Look for quick wins in the client-side JS."
+        },
+        {
+            "id": "goal_2",
+            "description": "Identify an approach to allow Burp's scanner to inject payloads that are properly encoded",
+            "hint": "First, identify tooling required to manipulate scan output."
+        }
+    ]
+} 

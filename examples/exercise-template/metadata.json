@@ -1,0 +1,31 @@
+{
+    "title": "Sample Exercise",
+    "version": "1.0.0",
+    "description": "A sample exercise template",
+    "level": "beginner",
+    "goals": [
+        {
+            "id": "goal_1",
+            "description": "Complete the first task",
+            "hint": "Look for the hidden flag"
+        }
+    ],
+    "completion_criteria": {
+        "endpoint": "/api/check-goal",
+        "method": "POST",
+        "format": {
+            "goal_id": "string",
+            "token": "string",
+            "data": "object"
+        }
+    },
+    "resources": {
+        "memory": "512M",
+        "cpu_shares": 1024
+    },
+    "environment_variables": {
+        "APP_PORT": "8080",
+        "DB_TYPE": "sqlite",
+        "DIFFICULTY": "beginner"
+    }
+} 

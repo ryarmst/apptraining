@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exercises - App Training Exercises</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/css/style.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">App Training Exercises</a>
+            <div class="navbar-nav ms-auto d-flex flex-row align-items-center">
+                <div id="admin-nav" class="d-none d-flex">
+                    <a class="nav-link px-3" href="/admin/images.html">Images</a>
+                    <a class="nav-link px-3" href="/admin/users.html">Users</a>
+                    <a class="nav-link px-3" href="/admin/logs.html">Logs</a>
+                </div>
+                <button onclick="logout()" class="btn btn-outline-light">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Active Containers Section -->
+        <div id="active-containers" class="mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2>Active Containers</h2>
+                <button id="refresh-containers" class="btn btn-outline-primary">
+                    <span class="refresh-icon">↻</span> Refresh Containers
+                </button>
+            </div>
+            <div id="containers-list" class="list-group"></div>
+        </div>
+
+        <!-- Available Exercises Section -->
+        <div id="available-exercises">
+            <h2>Available Exercises</h2>
+            <div id="exercises-grid" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4"></div>
+        </div>
+    </div>
+
+    <!-- Exercise Card Template -->
+    <template id="exercise-template">
+        <div class="col">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title"></h5>
+                    <p class="card-text description"></p>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="badge bg-info level"></span>
+                        <button class="btn btn-primary create-btn">Create Container</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Container Card Template -->
+    <template id="container-template">
+        <div class="list-group-item">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-1 exercise-name"></h5>
+                    <small class="text-muted created-at"></small>
+                    <br>
+                    <small class="text-info container-status"></small>
+                </div>
+                <div class="d-flex flex-column gap-2">
+                    <a class="btn btn-success open-btn" style="display: none" target="_blank">Open Exercise</a>
+                    <button class="btn btn-danger stop-btn" style="display: none">Stop Container</button>
+                    <div class="spinner-border text-primary initializing-spinner" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        // Check authentication on page load
+        checkAuth();
+
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/auth/check');
+                const data = await response.json();
+                
+                if (!data.authenticated) {
+                    window.location.href = '/';
+                    return;
+                }
+
+                // Show admin navigation if user is admin
+                if (data.user.isAdmin) {
+                    document.getElementById('admin-nav').classList.remove('d-none');
+                }
+
+                // Initialize data fetching after authentication
+                initializeDataFetching();
+
+            } catch (error) {
+                console.error('Auth check failed:', error);
+                window.location.href = '/';
+            }
+        }
+
+        // Initialize data fetching without intervals
+        async function initializeDataFetching() {
+            // Fetch exercises once (they don't change often)
+            const exercises = await fetchExercises();
+            displayExercises(exercises);
+            
+            // Initial container fetch
+            const containers = await fetchContainers();
+            displayContainers(containers);
+
+            // Set up refresh button click handler
+            const refreshButton = document.getElementById('refresh-containers');
+            refreshButton.addEventListener('click', handleRefreshClick);
+        }
+
+        // Handle refresh button click
+        async function handleRefreshClick() {
+            const button = document.getElementById('refresh-containers');
+            const icon = button.querySelector('.refresh-icon');
+            
+            button.disabled = true;
+            icon.style.display = 'inline-block';
+            icon.style.animation = 'spin 1s linear infinite';
+            
+            try {
+                const containers = await fetchContainers();
+                displayContainers(containers);
+            } finally {
+                button.disabled = false;
+                icon.style.animation = '';
+            }
+        }
+
+        async function fetchExercises() {
+            try {
+                const exercisesResponse = await fetch('/api/exercises');
+                const exercisesData = await exercisesResponse.json();
+                return exercisesData.exercises;
+            } catch (error) {
+                console.error('Error fetching exercises:', error);
+            }
+        }
+
+        async function fetchContainers() {
+            try {
+                const containersResponse = await fetch('/api/containers');
+                
+                if (!containersResponse.ok && containersResponse.status !== 304) {
+                    throw new Error(`HTTP error! status: ${containersResponse.status}`);
+                }
+
+                if (containersResponse.status === 200) {
+                    const containersData = await containersResponse.json();
+                    return containersData.containers;
+                }
+            } catch (error) {
+                console.error('Error fetching containers:', error);
+                // Show error message to user
+                const containersList = document.getElementById('containers-list');
+                containersList.innerHTML = `
+                    <div class="alert alert-danger" role="alert">
+                        Failed to fetch containers. Please try refreshing again.
+                    </div>
+                `;
+            }
+        }
+
+        function displayExercises(exercises) {
+            const grid = document.getElementById('exercises-grid');
+            const template = document.getElementById('exercise-template');
+            grid.innerHTML = '';
+
+            exercises.forEach(exercise => {
+                const clone = template.content.cloneNode(true);
+                clone.querySelector('.card-title').textContent = exercise.name;
+                clone.querySelector('.description').textContent = exercise.description;
+                clone.querySelector('.level').textContent = `Level ${exercise.level}`;
+                
+                const createBtn = clone.querySelector('.create-btn');
+                createBtn.onclick = () => launchExercise(exercise.id);
+                
+                grid.appendChild(clone);
+            });
+        }
+
+        function displayContainers(containers) {
+            const containerList = document.getElementById('containers-list');
+            const template = document.getElementById('container-template');
+            containerList.innerHTML = '';
+
+            if (containers.length === 0) {
+                document.getElementById('active-containers').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('active-containers').style.display = 'block';
+            containers.forEach(container => {
+                const clone = template.content.cloneNode(true);
+                clone.querySelector('.exercise-name').textContent = container.image_name;
+                
+                // Parse the UTC timestamp and format it in local time
+                const createdDate = new Date(container.created_at + 'Z'); // Append 'Z' to indicate UTC
+                clone.querySelector('.created-at').textContent = createdDate.toLocaleString();
+                
+                const openBtn = clone.querySelector('.open-btn');
+                const stopBtn = clone.querySelector('.stop-btn');
+                const spinner = clone.querySelector('.initializing-spinner');
+                const statusText = clone.querySelector('.container-status');
+
+                if (container.status === 'running') {
+                    openBtn.style.display = 'block';
+                    stopBtn.style.display = 'block';
+                    spinner.style.display = 'none';
+                    statusText.textContent = 'Container ready';
+                    statusText.classList.add('text-success');
+                    openBtn.href = `https://${container.subdomain}.apptraining.dbg.local`;
+                    stopBtn.onclick = () => stopContainer(container.container_id);
+                } else {
+                    openBtn.style.display = 'none';
+                    stopBtn.style.display = 'none';
+                    spinner.style.display = 'none';
+                    statusText.textContent = 'Container failed to initialize. Please try again.';
+                    statusText.classList.add('text-danger');
+                }
+                
+                containerList.appendChild(clone);
+            });
+        }
+
+        async function launchExercise(exerciseId) {
+            try {
+                const response = await fetch(`/api/containers/launch/${exerciseId}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to create exercise container');
+                }
+
+            } catch (error) {
+                console.error('Launch failed:', error);
+                alert('Failed to create exercise container. Please try again.');
+            }
+        }
+
+        async function stopContainer(containerId) {
+            if (!confirm('Are you sure you want to stop this container? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/containers/${containerId}/stop`, {
+                    method: 'POST'
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.error || 'Failed to stop container');
+                }
+
+                // Refresh the containers list
+                const containers = await fetchContainers();
+                displayContainers(containers);
+            } catch (error) {
+                console.error('Stop container failed:', error);
+                alert('Failed to stop container. Please try again.');
+            }
+        }
+
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                window.location.href = '/';
+            } catch (error) {
+                console.error('Logout failed:', error);
+            }
+        }
+
+        // Add styles for refresh button animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+            .refresh-icon {
+                display: inline-block;
+                font-size: 1.2em;
+                margin-right: 5px;
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html> 

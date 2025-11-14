@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - App Training Exercises</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/css/style.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/exercises.html">App Training Exercises</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/admin/images.html">Images</a>
+                <a class="nav-link active" href="/admin/users.html">Users</a>
+                <a class="nav-link" href="/admin/logs.html">Logs</a>
+                <button onclick="logout()" class="btn btn-outline-light ms-3">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="card shadow">
+                    <div class="card-header">
+                        <h3 class="mb-0">User Management</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="error-message" class="alert alert-danger d-none"></div>
+                        <div id="success-message" class="alert alert-success d-none"></div>
+
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Username</th>
+                                        <th>Role</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="users-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check admin authentication on page load
+        checkAdminAuth();
+
+        async function checkAdminAuth() {
+            try {
+                const response = await fetch('/api/auth/check');
+                const data = await response.json();
+                
+                if (!data.authenticated || !data.user.isAdmin) {
+                    window.location.href = '/';
+                    return;
+                }
+            } catch (error) {
+                console.error('Auth check failed:', error);
+                window.location.href = '/';
+            }
+        }
+
+        // Fetch and display users
+        async function fetchUsers() {
+            try {
+                const response = await fetch('/api/admin/users');
+                const data = await response.json();
+                displayUsers(data.users);
+            } catch (error) {
+                console.error('Error fetching users:', error);
+            }
+        }
+
+        function displayUsers(users) {
+            const tbody = document.getElementById('users-table-body');
+            tbody.innerHTML = '';
+
+            users.forEach(user => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${user.username}</td>
+                    <td>${user.isAdmin ? 'Admin' : 'User'}</td>
+                    <td>${new Date(user.createdAt).toLocaleString()}</td>
+                    <td>
+                        ${!user.isAdmin ? `
+                            <button onclick="deleteUser('${user.id}')" class="btn btn-danger btn-sm">Delete</button>
+                        ` : ''}
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        async function deleteUser(userId) {
+            if (!confirm('Are you sure you want to delete this user?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/admin/users/${userId}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to delete user');
+                }
+
+                fetchUsers(); // Refresh the list
+            } catch (error) {
+                console.error('Delete failed:', error);
+                alert('Failed to delete user. Please try again.');
+            }
+        }
+
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                window.location.href = '/';
+            } catch (error) {
+                console.error('Logout failed:', error);
+            }
+        }
+
+        // Initial data fetch
+        fetchUsers();
+    </script>
+</body>
+</html> 
