@@ -33,13 +33,15 @@ const isAuthenticated = async (req, res, next) => {
     }
 };
 
-// Middleware to check if user is admin
+// Middleware to check if user is admin (chains isAuthenticated)
 const isAdmin = (req, res, next) => {
-    if (req.session.userRole === 'admin') {
-        next();
-    } else {
-        res.status(403).json({ error: 'Forbidden' });
+    if (!req.session.userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
     }
+    if (req.session.userRole !== 'admin') {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+    next();
 };
 
 // Check authentication status

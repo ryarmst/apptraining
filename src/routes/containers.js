@@ -6,14 +6,16 @@ const { db } = require('../db/init');
 
 const router = express.Router();
 
-// Get user's running containers
+const PLATFORM_DOMAIN = process.env.PLATFORM_DOMAIN || 'apptraining.dbg.local';
+const MAX_CONTAINERS = parseInt(process.env.MAX_CONTAINERS_PER_USER, 10) || 3;
+
 router.get('/', isAuthenticated, async (req, res) => {
     try {
         const containers = await new Promise((resolve, reject) => {
             db.all(
                 `SELECT c.*, i.name as image_name, i.level, i.description
-                 FROM containers c 
-                 JOIN docker_images i ON c.image_id = i.id 
+                 FROM containers c
+                 JOIN docker_images i ON c.image_id = i.id
                  WHERE c.user_id = ? AND c.status = 'running'
                  ORDER BY c.created_at DESC`,
                 [req.session.userId],
@@ -31,12 +33,10 @@ router.get('/', isAuthenticated, async (req, res) => {
     }
 });
 
-// Launch new container
 router.post('/launch/:imageId', isAuthenticated, async (req, res) => {
     try {
         const { imageId } = req.params;
 
-        // Check if user already has a running container for this image
         const existingContainer = await new Promise((resolve, reject) => {
             db.get(
                 'SELECT * FROM containers WHERE user_id = ? AND image_id = ? AND status = ?',
@@ -52,12 +52,11 @@ router.post('/launch/:imageId', isAuthenticated, async (req, res) => {
             return res.status(400).json({
                 error: 'Container already running for this exercise',
                 containerId: existingContainer.container_id,
-                subdomain: `${existingContainer.subdomain}.apptraining.dbg.local`,
-                message: 'You already have a running instance of this exercise. Please use the existing container or stop it first.'
+                subdomain: `${existingContainer.subdomain}.${PLATFORM_DOMAIN}`,
+                message: 'You already have a running instance of this exercise. Please stop it first.'
             });
         }
 
-        // Check total number of running containers for user
         const runningContainers = await new Promise((resolve, reject) => {
             db.get(
                 'SELECT COUNT(*) as count FROM containers WHERE user_id = ? AND status = ?',
@@ -69,21 +68,19 @@ router.post('/launch/:imageId', isAuthenticated, async (req, res) => {
             );
         });
 
-        if (runningContainers.count >= 3) {
+        if (runningContainers.count >= MAX_CONTAINERS) {
             return res.status(400).json({
                 error: 'Maximum container limit reached',
-                message: 'You can only have 3 active containers at a time. Please stop an existing container before launching a new one.'
+                message: `You can only have ${MAX_CONTAINERS} active containers at a time. Please stop an existing container first.`
             });
         }
 
-        // Create new container
         const containerInfo = await DockerService.createContainer(imageId, req.session.userId);
 
-        // Update exercise progress
         await new Promise((resolve, reject) => {
             db.run(
                 `INSERT OR REPLACE INTO exercise_progress (user_id, image_id, status, attempts)
-                 VALUES (?, ?, 'in_progress', COALESCE((SELECT attempts + 1 FROM exercise_progress 
+                 VALUES (?, ?, 'in_progress', COALESCE((SELECT attempts + 1 FROM exercise_progress
                  WHERE user_id = ? AND image_id = ?), 1))`,
                 [req.session.userId, imageId, req.session.userId, imageId],
                 (err) => {
@@ -100,12 +97,10 @@ router.post('/launch/:imageId', isAuthenticated, async (req, res) => {
     }
 });
 
-// Stop container
 router.post('/:containerId/stop', isAuthenticated, async (req, res) => {
     try {
         const { containerId } = req.params;
 
-        // Verify container belongs to user
         const container = await new Promise((resolve, reject) => {
             db.get(
                 'SELECT * FROM containers WHERE container_id = ? AND user_id = ?',
@@ -129,26 +124,4 @@ router.post('/:containerId/stop', isAuthenticated, async (req, res) => {
     }
 });
 
-// Handle exercise completion callback
-router.post('/:subdomain/complete', async (req, res) => {
-    try {
-        const { subdomain } = req.params;
-        const result = await DockerService.handleExerciseCompletion(subdomain, req.body);
-        res.json({ success: result });
-    } catch (error) {
-        logger.error('Error handling exercise completion:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
-// Track container activity
-router.use('/:subdomain/*', (req, res, next) => {
-    const { subdomain } = req.params;
-    const activityCallback = global.containerActivity.get(subdomain);
-    if (activityCallback) {
-        activityCallback();
-    }
-    next();
-});
-
-module.exports = { router }; 
+module.exports = { router };

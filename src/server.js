@@ -11,6 +11,14 @@ const { logger } = require('./utils/logger');
 const { createSubdomainHandler } = require('./middleware/subdomain');
 require('dotenv').config();
 
+// Ensure required directories exist
+['data', 'logs', 'uploads/exercises'].forEach(dir => {
+    const dirPath = path.join(__dirname, '..', dir);
+    if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+    }
+});
+
 /**
  * Application configuration
  */
@@ -22,6 +30,10 @@ const CONFIG = {
     sessionSecret: process.env.SESSION_SECRET || 'your-secret-key'
 };
 
+if (CONFIG.sessionSecret === 'your-secret-key') {
+    logger.warn('Using default SESSION_SECRET -- set a secure value in .env for production');
+}
+
 /**
  * Initialize Express routers
  */
@@ -32,10 +44,10 @@ async function initializeRouters() {
         auth: require('./routes/auth').router,
         exercises: require('./routes/exercises').router,
         admin: require('./routes/admin').router,
-        containers: require('./routes/containers').router
+        containers: require('./routes/containers').router,
+        callback: require('./routes/callback').router
     };
 
-    // Log router status
     Object.entries(routers).forEach(([name, router]) => {
         logger.info(`${name} router:`, { type: typeof router });
     });
@@ -96,7 +108,8 @@ function mountAPIRoutes(app, routers) {
         '/api/auth': routers.auth,
         '/api/exercises': routers.exercises,
         '/api/admin': routers.admin,
-        '/api/containers': routers.containers
+        '/api/containers': routers.containers,
+        '/api/callback': routers.callback
     };
 
     Object.entries(routes).forEach(([path, router]) => {
@@ -128,7 +141,7 @@ function startHTTPServer(port) {
 function dropRootPrivileges() {
     if (process.getuid() === 0) {
         try {
-            const username = process.env.SUDO_USER || process.env.USER || 'rarmstrong';
+            const username = process.env.SUDO_USER || process.env.USER || 'nobody';
             const userInfo = require('os').userInfo(username);
             process.setgid(userInfo.gid);
             process.setuid(userInfo.uid);

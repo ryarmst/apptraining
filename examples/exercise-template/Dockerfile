@@ -1,32 +1,29 @@
 FROM node:18-slim
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    sqlite3 \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create app directory
-WORKDIR /app
+RUN groupadd -r appuser && useradd -r -g appuser -s /bin/false appuser
 
-# Copy exercise files
+WORKDIR /usr/src/app
+
+COPY package*.json ./
+RUN npm ci --only=production
+
 COPY . .
 
-# Copy completion script
 COPY check-completion.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/check-completion.sh
 
-# Install dependencies
-RUN npm install
+RUN chown -R appuser:appuser /usr/src/app
+USER appuser
 
-# Initialize database with vulnerable app
-RUN sqlite3 app.db < init.sql
-
-# Set environment variables
 ENV NODE_ENV=production
-ENV APP_PORT=3000
 
-# Expose the application port
-EXPOSE 3000
+EXPOSE 8080
 
-# Start the application
+HEALTHCHECK --interval=30s --timeout=3s \
+    CMD curl -f http://localhost:8080/ || exit 1
+
 CMD ["node", "app.js"] 
