@@ -6,7 +6,7 @@ const { db } = require('../db/init');
 
 const router = express.Router();
 
-const PLATFORM_DOMAIN = process.env.PLATFORM_DOMAIN || 'apptraining.dbg.local';
+const PLATFORM_DOMAIN = process.env.PLATFORM_DOMAIN || 'training.local';
 const MAX_CONTAINERS = parseInt(process.env.MAX_CONTAINERS_PER_USER, 10) || 3;
 
 router.get('/', isAuthenticated, async (req, res) => {

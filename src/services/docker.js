@@ -13,7 +13,7 @@ try {
     docker = null;
 }
 
-const PLATFORM_DOMAIN = process.env.PLATFORM_DOMAIN || 'apptraining.dbg.local';
+const PLATFORM_DOMAIN = process.env.PLATFORM_DOMAIN || 'training.local';
 const CONTAINER_IDLE_TIMEOUT = (parseInt(process.env.CONTAINER_IDLE_TIMEOUT_MINUTES, 10) || 15) * 60 * 1000;
 const CONTAINER_MAX_LIFETIME = (parseInt(process.env.CONTAINER_MAX_LIFETIME_HOURS, 10) || 2) * 60 * 60 * 1000;
 

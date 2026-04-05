@@ -13,7 +13,7 @@ A Docker-based platform for training security testers through hands-on exercises
 - Node.js 18+
 - Docker Engine
 - SQLite3
-- Linux environment with wildcard subdomain DNS (e.g. `*.apptraining.dbg.local`)
+- Linux environment with wildcard subdomain DNS (e.g. `*.yourdomain.local` -- set `PLATFORM_DOMAIN` in `.env`)
 
 ## Installation
 
