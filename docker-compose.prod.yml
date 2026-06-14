@@ -1,0 +1,13 @@
+services:
+  apptraining:
+    image: ghcr.io/ryarmst/apptraining:latest
+    container_name: apptraining
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+    env_file: .env
+    restart: unless-stopped

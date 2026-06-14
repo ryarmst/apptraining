@@ -10,11 +10,10 @@
 <body class="bg-light">
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container">
-            <a class="navbar-brand" href="/exercises.html">Security Training Platform</a>
+            <a class="navbar-brand" href="/admin/images.html">Security Training Platform</a>
             <div class="navbar-nav ms-auto d-flex flex-row align-items-center">
                 <a class="nav-link px-3" href="/admin/images.html">Images</a>
-                <a class="nav-link px-3" href="/admin/users.html">Users</a>
-                <a class="nav-link px-3" href="/admin/results.html">Results</a>
+                <a class="nav-link px-3" href="/admin/challenges.html">Challenges</a>
                 <a class="nav-link active px-3" href="/admin/logs.html">Logs</a>
                 <button onclick="logout()" class="btn btn-outline-light ms-2">Logout</button>
             </div>
@@ -39,7 +38,7 @@
             <div class="table-responsive">
                 <table class="table table-striped table-sm">
                     <thead><tr>
-                        <th>Exercise</th><th>User</th><th>Started</th><th>Uptime</th><th>Actions</th>
+                        <th>Exercise</th><th>Started</th><th>Uptime</th><th>Access URL</th><th>Actions</th>
                     </tr></thead>
                     <tbody id="containers-table"></tbody>
                 </table>
@@ -61,7 +60,7 @@
             <div class="table-responsive">
                 <table class="table table-striped table-sm">
                     <thead><tr>
-                        <th style="min-width:160px">Time</th><th>Event</th><th>User</th><th>Details</th>
+                        <th style="min-width:160px">Time</th><th>Event</th><th>Details</th>
                     </tr></thead>
                     <tbody id="logs-table"></tbody>
                 </table>
@@ -110,22 +109,40 @@
             `).join('');
         }
 
+        function buildContainerUrl(subdomain) {
+            const protocol = window.location.protocol;
+            const port = window.location.port ? ':' + window.location.port : '';
+            return `${protocol}//${subdomain}${port}`;
+        }
+
         function displayContainers(containers) {
             const tbody = document.getElementById('containers-table');
             tbody.innerHTML = containers.map(c => {
                 const elapsed = Date.now() - new Date(c.created_at).getTime();
                 const mins = Math.floor(elapsed / 60000);
+                const url = buildContainerUrl(c.subdomain + '.' + window.location.hostname.split('.').slice(-2).join('.'));
                 return `<tr>
                     <td>${c.exercise_name} <span class="badge bg-info">${c.level}</span></td>
-                    <td>${c.username}</td>
                     <td>${new Date(c.created_at).toLocaleString()}</td>
                     <td>${mins}m</td>
                     <td>
+                        <div class="input-group input-group-sm" style="min-width:280px">
+                            <input type="text" class="form-control font-monospace" value="${url}" readonly id="url-${c.container_id}">
+                            <button class="btn btn-outline-secondary" onclick="copyContainerUrl('${c.container_id}')" title="Copy">Copy</button>
+                        </div>
+                    </td>
+                    <td>
                         <button onclick="stopContainer('${c.container_id}')" class="btn btn-sm btn-danger">Stop</button>
-                        <a href="https://${c.subdomain}.${window.location.hostname.split('.').slice(-2).join('.')}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
+                        <a href="${url}" target="_blank" class="btn btn-sm btn-outline-primary">Open</a>
                     </td>
                 </tr>`;
             }).join('');
+        }
+
+        function copyContainerUrl(containerId) {
+            const input = document.getElementById('url-' + containerId);
+            input.select();
+            navigator.clipboard.writeText(input.value).catch(() => document.execCommand('copy'));
         }
 
         function displayLogs(logs) {
@@ -136,7 +153,6 @@
                 return `<tr>
                     <td>${new Date(l.created_at).toLocaleString()}</td>
                     <td><span class="badge bg-dark">${l.event_type}</span></td>
-                    <td>${l.username || 'System'}</td>
                     <td><small><code>${JSON.stringify(details)}</code></small></td>
                 </tr>`;
             }).join('');

@@ -72,7 +72,11 @@ class DockerService {
                 PortBindings: {
                     '8080/tcp': [{ HostPort: '0' }]
                 },
-                RestartPolicy: { Name: 'no' }
+                RestartPolicy: { Name: 'no' },
+                ExtraHosts: [
+                    'host.docker.internal:host-gateway',
+                    `${PLATFORM_DOMAIN}:host-gateway`
+                ]
             };
 
             if (resources.memory) {
@@ -103,7 +107,7 @@ class DockerService {
             const containerEnv = [
                 `TRAINING_SUBDOMAIN=${subdomain}`,
                 `CALLBACK_TOKEN=${callbackToken}`,
-                `CALLBACK_URL=http://host.docker.internal:${process.env.PORT || 3000}/api/callback/${subdomain}/task`,
+                `CALLBACK_URL=https://${PLATFORM_DOMAIN}:${process.env.SSL_PORT || 443}/api/callback/${subdomain}/task`,
                 `PLATFORM_DOMAIN=${PLATFORM_DOMAIN}`,
                 `TASK_IDS=${taskIds}`
             ];
@@ -119,8 +123,8 @@ class DockerService {
                 ExposedPorts: { '8080/tcp': {} },
                 HostConfig: hostConfig,
                 Labels: {
+                    'training.managed': 'true',
                     'training.subdomain': subdomain,
-                    'training.user': userId.toString(),
                     'training.image': imageId.toString()
                 }
             });
@@ -132,9 +136,9 @@ class DockerService {
 
             await new Promise((resolve, reject) => {
                 db.run(
-                    `INSERT INTO containers (container_id, image_id, user_id, subdomain, callback_token, status, host_port)
-                     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                    [container.id, imageId, userId, subdomain, callbackToken, 'running', hostPort],
+                    `INSERT INTO containers (container_id, image_id, subdomain, callback_token, status, host_port)
+                     VALUES (?, ?, ?, ?, ?, ?)`,
+                    [container.id, imageId, subdomain, callbackToken, 'running', hostPort],
                     (err) => {
                         if (err) reject(err);
                         resolve();
@@ -144,7 +148,7 @@ class DockerService {
 
             this.monitorContainer(container.id, subdomain);
 
-            await SystemLogger.logEvent('container_created', userId, container.id, {
+            await SystemLogger.logEvent('container_created', null, container.id, {
                 image_id: imageId,
                 subdomain,
                 host_port: hostPort
@@ -168,7 +172,7 @@ class DockerService {
         try {
             const containerInfo = await new Promise((resolve, reject) => {
                 db.get(
-                    'SELECT user_id, image_id, subdomain FROM containers WHERE container_id = ?',
+                    'SELECT image_id, subdomain FROM containers WHERE container_id = ?',
                     [containerId],
                     (err, row) => {
                         if (err) reject(err);
@@ -194,7 +198,7 @@ class DockerService {
             }
 
             if (containerInfo) {
-                await SystemLogger.logEvent('container_stopped', containerInfo.user_id, containerId, {
+                await SystemLogger.logEvent('container_stopped', null, containerId, {
                     image_id: containerInfo.image_id
                 });
                 if (containerInfo.subdomain) {
@@ -309,9 +313,9 @@ class DockerService {
 
         await new Promise((resolve, reject) => {
             db.run(
-                `INSERT OR IGNORE INTO task_completions (user_id, image_id, container_id, task_id, evidence)
-                 VALUES (?, ?, ?, ?, ?)`,
-                [containerInfo.user_id, containerInfo.image_id, containerInfo.container_id, taskId, evidence ? JSON.stringify(evidence) : null],
+                `INSERT OR IGNORE INTO task_completions (image_id, container_id, task_id, evidence)
+                 VALUES (?, ?, ?, ?)`,
+                [containerInfo.image_id, containerInfo.container_id, taskId, evidence ? JSON.stringify(evidence) : null],
                 (err) => {
                     if (err) reject(err);
                     resolve();
@@ -319,15 +323,15 @@ class DockerService {
             );
         });
 
-        await SystemLogger.logEvent('task_completed', containerInfo.user_id, containerInfo.container_id, {
+        await SystemLogger.logEvent('task_completed', null, containerInfo.container_id, {
             image_id: containerInfo.image_id,
             task_id: taskId
         });
 
         const completedCount = await new Promise((resolve, reject) => {
             db.get(
-                'SELECT COUNT(*) as count FROM task_completions WHERE user_id = ? AND image_id = ?',
-                [containerInfo.user_id, containerInfo.image_id],
+                'SELECT COUNT(*) as count FROM task_completions WHERE container_id = ?',
+                [containerInfo.container_id],
                 (err, row) => {
                     if (err) reject(err);
                     resolve(row?.count || 0);
@@ -341,18 +345,6 @@ class DockerService {
         if (allComplete) {
             await new Promise((resolve, reject) => {
                 db.run(
-                    `UPDATE exercise_progress SET status = 'completed', completed_at = CURRENT_TIMESTAMP
-                     WHERE user_id = ? AND image_id = ?`,
-                    [containerInfo.user_id, containerInfo.image_id],
-                    (err) => {
-                        if (err) reject(err);
-                        resolve();
-                    }
-                );
-            });
-
-            await new Promise((resolve, reject) => {
-                db.run(
                     'UPDATE containers SET status = ? WHERE subdomain = ?',
                     ['completed', subdomain],
                     (err) => {
@@ -362,7 +354,7 @@ class DockerService {
                 );
             });
 
-            await SystemLogger.logEvent('exercise_completed', containerInfo.user_id, containerInfo.container_id, {
+            await SystemLogger.logEvent('exercise_completed', null, containerInfo.container_id, {
                 image_id: containerInfo.image_id,
                 tasks_completed: completedCount,
                 tasks_total: totalTasks
@@ -376,6 +368,49 @@ class DockerService {
             tasks_total: totalTasks,
             exercise_complete: allComplete
         };
+    }
+
+    // Re-attach monitors to any containers that were running before a server restart.
+    // Also marks as stopped any DB-running containers that are no longer alive in Docker.
+    static async restoreRunningContainers() {
+        if (!this.isAvailable()) return;
+
+        const dbRunning = await new Promise((resolve, reject) => {
+            db.all(
+                "SELECT container_id, subdomain FROM containers WHERE status = 'running'",
+                (err, rows) => { if (err) reject(err); else resolve(rows || []); }
+            );
+        });
+
+        if (dbRunning.length === 0) return;
+
+        logger.info(`Checking ${dbRunning.length} DB-running container(s) after restart...`);
+
+        for (const row of dbRunning) {
+            try {
+                const container = docker.getContainer(row.container_id);
+                const info = await container.inspect();
+                if (info.State.Running) {
+                    logger.info(`Re-attaching monitor to container ${row.container_id.slice(0, 12)}`);
+                    this.monitorContainer(row.container_id, row.subdomain);
+                } else {
+                    logger.info(`Container ${row.container_id.slice(0, 12)} is stopped — updating DB`);
+                    await new Promise((resolve, reject) => {
+                        db.run('UPDATE containers SET status = ? WHERE container_id = ?',
+                            ['stopped', row.container_id],
+                            (err) => { if (err) reject(err); else resolve(); });
+                    });
+                }
+            } catch (e) {
+                // Container doesn't exist in Docker at all
+                logger.info(`Container ${row.container_id.slice(0, 12)} not found in Docker — marking stopped`);
+                await new Promise((resolve, reject) => {
+                    db.run('UPDATE containers SET status = ? WHERE container_id = ?',
+                        ['stopped', row.container_id],
+                        (err) => { if (err) reject(err); else resolve(); });
+                });
+            }
+        }
     }
 
     static async cleanupResources() {
@@ -393,7 +428,7 @@ class DockerService {
 
             const dockerContainers = await docker.listContainers({
                 all: true,
-                filters: { label: ['training.user'] }
+                filters: { label: ['training.managed=true'] }
             });
 
             await new Promise((resolve, reject) => {
@@ -539,6 +574,10 @@ async function setupPeriodicCleanup() {
         logger.warn('Docker service is not available, skipping periodic cleanup setup');
         return;
     }
+
+    // Re-attach monitors to any containers that survived a restart before
+    // running cleanup (which would otherwise mark them stopped).
+    await DockerService.restoreRunningContainers();
 
     const CLEANUP_INTERVAL = 6 * 60 * 60 * 1000;
     let cleanupInProgress = false;

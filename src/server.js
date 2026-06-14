@@ -136,9 +136,35 @@ function startHTTPServer(port) {
 }
 
 /**
+ * Allow Docker containers to reach the host's HTTPS port for task callbacks.
+ * Adds an iptables INPUT ACCEPT rule for RFC-1918 172.16.0.0/12 (covers all
+ * default Docker bridge ranges) scoped to the SSL port. Must run as root.
+ */
+function configureDockerCallbackAccess() {
+    if (process.getuid() !== 0) {
+        logger.warn('Not running as root — skipping iptables callback rule. Containers may not be able to reach the callback endpoint.');
+        return;
+    }
+    const { execSync } = require('child_process');
+    const port = CONFIG.sslPort;
+    const subnet = '172.16.0.0/12';
+    const rule = `-s ${subnet} -p tcp --dport ${port} -j ACCEPT`;
+    try {
+        execSync(`iptables -C INPUT ${rule} 2>/dev/null || iptables -I INPUT ${rule}`);
+        logger.info(`iptables: allowed INPUT from ${subnet} to port ${port} for container callbacks`);
+    } catch (e) {
+        logger.error('iptables: failed to add callback rule:', e.message);
+    }
+}
+
+/**
  * Drop root privileges after binding to privileged ports
  */
 function dropRootPrivileges() {
+    if (fs.existsSync('/.dockerenv')) {
+        logger.info('Running in container — keeping root for Docker socket access');
+        return;
+    }
     if (process.getuid() === 0) {
         try {
             const username = process.env.SUDO_USER || process.env.USER || 'nobody';
@@ -227,7 +253,7 @@ async function startServer() {
         const httpsServer = https.createServer(configureSSL(), app);
         httpsServer.listen(CONFIG.sslPort, () => {
             logger.info(`HTTPS Server running on port ${CONFIG.sslPort}`);
-            // Drop root privileges after binding to port 443
+            configureDockerCallbackAccess();
             dropRootPrivileges();
         });
 

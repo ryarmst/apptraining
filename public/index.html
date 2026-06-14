@@ -28,9 +28,6 @@
                             </div>
                             <button type="submit" class="btn btn-primary w-100">Login</button>
                         </form>
-                        <div class="text-center mt-3">
-                            <a href="/register.html" class="text-decoration-none">Register for an account</a>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -61,8 +58,7 @@
                     throw new Error(data.error || 'Login failed');
                 }
 
-                // Redirect to exercises page on success
-                window.location.href = '/exercises.html';
+                window.location.href = '/admin/images.html';
             } catch (err) {
                 errorDiv.textContent = err.message;
                 errorDiv.classList.remove('d-none');

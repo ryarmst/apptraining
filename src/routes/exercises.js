@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const tar = require('tar');
 const AdmZip = require('adm-zip');
-const { isAuthenticated, isAdmin } = require('../routes/auth');
+const { isAdmin } = require('../routes/auth');
 const { logger } = require('../utils/logger');
 const { db } = require('../db/init');
 const Docker = require('dockerode');
@@ -36,16 +36,11 @@ const upload = multer({
     limits: { fileSize: 50 * 1024 * 1024 }
 });
 
-router.get('/', isAuthenticated, async (req, res) => {
+router.get('/', isAdmin, async (req, res) => {
     try {
         const exercises = await new Promise((resolve, reject) => {
             db.all(
-                `SELECT i.*,
-                 (SELECT status FROM exercise_progress WHERE user_id = ? AND image_id = i.id) as progress_status,
-                 (SELECT attempts FROM exercise_progress WHERE user_id = ? AND image_id = i.id) as attempts
-                 FROM docker_images i
-                 ORDER BY i.level, i.name`,
-                [req.session.userId, req.session.userId],
+                'SELECT * FROM docker_images ORDER BY level, name',
                 (err, rows) => {
                     if (err) reject(err);
                     resolve(rows || []);
@@ -53,103 +48,24 @@ router.get('/', isAuthenticated, async (req, res) => {
             );
         });
 
-        const enriched = [];
-        for (const ex of exercises) {
+        const enriched = exercises.map(ex => {
             let metadata = {};
             try { metadata = JSON.parse(ex.metadata || '{}'); } catch (e) { /* ignore */ }
-
             const goals = metadata.goals || [];
-            const completedTasks = await new Promise((resolve, reject) => {
-                db.all(
-                    'SELECT task_id, completed_at FROM task_completions WHERE user_id = ? AND image_id = ?',
-                    [req.session.userId, ex.id],
-                    (err, rows) => {
-                        if (err) reject(err);
-                        resolve(rows || []);
-                    }
-                );
-            });
-
-            enriched.push({
+            return {
                 id: ex.id,
                 name: ex.name,
                 version: ex.version,
                 description: ex.description,
                 level: ex.level,
                 created_at: ex.created_at,
-                progress_status: ex.progress_status || 'not_started',
-                attempts: ex.attempts || 0,
-                tasks: goals.map(g => ({
-                    id: g.id,
-                    description: g.description,
-                    hint: g.hint,
-                    completed: completedTasks.some(ct => ct.task_id === g.id),
-                    completed_at: completedTasks.find(ct => ct.task_id === g.id)?.completed_at || null
-                })),
-                tasks_completed: completedTasks.length,
                 tasks_total: goals.length
-            });
-        }
+            };
+        });
 
         res.json({ exercises: enriched });
     } catch (error) {
         logger.error('Error getting exercises:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
-router.get('/progress', isAuthenticated, async (req, res) => {
-    try {
-        const images = await new Promise((resolve, reject) => {
-            db.all('SELECT id, name, level, metadata FROM docker_images ORDER BY level, name', (err, rows) => {
-                if (err) reject(err);
-                resolve(rows || []);
-            });
-        });
-
-        const progress = [];
-        for (const img of images) {
-            let metadata = {};
-            try { metadata = JSON.parse(img.metadata || '{}'); } catch (e) { /* ignore */ }
-            const goals = metadata.goals || [];
-
-            const ep = await new Promise((resolve, reject) => {
-                db.get(
-                    'SELECT * FROM exercise_progress WHERE user_id = ? AND image_id = ?',
-                    [req.session.userId, img.id],
-                    (err, row) => { if (err) reject(err); resolve(row); }
-                );
-            });
-
-            const completedTasks = await new Promise((resolve, reject) => {
-                db.all(
-                    'SELECT task_id, completed_at FROM task_completions WHERE user_id = ? AND image_id = ?',
-                    [req.session.userId, img.id],
-                    (err, rows) => { if (err) reject(err); resolve(rows || []); }
-                );
-            });
-
-            progress.push({
-                exercise_id: img.id,
-                exercise_name: img.name,
-                level: img.level,
-                status: ep?.status || 'not_started',
-                attempts: ep?.attempts || 0,
-                completed_at: ep?.completed_at || null,
-                tasks_completed: completedTasks.length,
-                tasks_total: goals.length,
-                tasks: goals.map(g => ({
-                    id: g.id,
-                    description: g.description,
-                    completed: completedTasks.some(ct => ct.task_id === g.id),
-                    completed_at: completedTasks.find(ct => ct.task_id === g.id)?.completed_at || null
-                }))
-            });
-        }
-
-        res.json({ progress });
-    } catch (error) {
-        logger.error('Error getting progress:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -374,7 +290,7 @@ router.delete('/:id', isAdmin, async (req, res) => {
         });
 
         await new Promise((resolve, reject) => {
-            db.run('DELETE FROM exercise_progress WHERE image_id = ?', [id], (err) => {
+            db.run('DELETE FROM containers WHERE image_id = ?', [id], (err) => {
                 if (err) reject(err);
                 resolve();
             });

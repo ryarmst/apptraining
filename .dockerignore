@@ -1,0 +1,13 @@
+node_modules
+data
+logs
+uploads
+.env
+.git
+.github
+*.db
+*.db-shm
+*.db-wal
+deploy
+setup.sh
+Lab_instructions.md

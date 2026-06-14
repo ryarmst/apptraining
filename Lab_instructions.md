@@ -138,6 +138,21 @@ The platform injects these into every container:
 | `PLATFORM_DOMAIN` | Platform's base domain |
 | `TASK_IDS` | Comma-separated list of expected task IDs |
 
+## Challenge Status Page
+
+The platform provides a live challenge status view at `/admin/challenges.html`. Admins can also view the status for a single exercise at `/admin/challenges.html?imageId=<id>`, and can reach it directly by clicking **Challenges** next to any exercise in the Images table.
+
+The page auto-refreshes every 10 seconds and shows:
+- Every active instance (running or completed) for the exercise
+- Each task as a colour-coded pill: **green with a tick** = completed, **grey** = pending
+- A progress bar showing tasks completed / total
+- Clicking a completed task opens a detail panel with the completion timestamp and any evidence the exercise reported
+
+**Design your tasks and evidence with this view in mind:**
+- Keep `description` values short and action-oriented — they appear directly on each pill (e.g. `"Identify the injection point"`, not `"SQL injection"`)
+- The `hint` field is shown in the detail panel; use it for the expected technique or tool, not a spoiler
+- Structure `evidence` as a JSON object with meaningful keys — it renders as formatted JSON in the detail panel. Prefer specific keys over a plain string (e.g. `{"method": "UNION-based", "payload": "..."}` rather than `"bypass"`)
+
 ## Design Philosophy
 
 This platform trains **methodological competency**, not flag-finding. When designing exercises:
@@ -146,9 +161,11 @@ This platform trains **methodological competency**, not flag-finding. When desig
 
 2. **Automated vs. manual verification**: Tasks can be verified automatically (the exercise app detects the user's action and calls `check-completion.sh`) or manually (the user triggers completion themselves after demonstrating the skill).
 
-3. **Evidence tracking**: Use the `evidence` field to capture how the user completed the task. This helps admins review methodology quality.
+3. **Evidence tracking**: Use the `evidence` field to capture how the user completed the task. This is displayed on the Challenge Status page and helps reviewers assess methodology quality. Structure it as a descriptive JSON object.
 
 4. **Progressive difficulty**: Order goals from basic to advanced. Earlier tasks should build toward later ones.
+
+5. **Observable completions**: The challenge status page is typically visible to the instructor during a live session. Design task completions to fire at the moment the methodology step is correctly demonstrated — not at the end of the exercise — so the instructor can see progress in real time.
 
 ## Critical Requirements
 

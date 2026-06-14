@@ -53,41 +53,81 @@ const initializeDatabase = async () => {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             container_id TEXT UNIQUE NOT NULL,
             image_id INTEGER,
-            user_id INTEGER,
             subdomain TEXT UNIQUE NOT NULL,
             callback_token TEXT NOT NULL,
             status TEXT CHECK(status IN ('running', 'stopped', 'completed')) NOT NULL,
             host_port TEXT,
             last_activity DATETIME DEFAULT CURRENT_TIMESTAMP,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(image_id) REFERENCES docker_images(id),
-            FOREIGN KEY(user_id) REFERENCES users(id)
-        )`);
-
-        await runAsync(`CREATE TABLE IF NOT EXISTS exercise_progress (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            image_id INTEGER,
-            status TEXT CHECK(status IN ('not_started', 'in_progress', 'completed')) DEFAULT 'not_started',
-            attempts INTEGER DEFAULT 0,
-            completed_at DATETIME,
-            FOREIGN KEY(user_id) REFERENCES users(id),
-            FOREIGN KEY(image_id) REFERENCES docker_images(id),
-            UNIQUE(user_id, image_id)
+            FOREIGN KEY(image_id) REFERENCES docker_images(id)
         )`);
 
         await runAsync(`CREATE TABLE IF NOT EXISTS task_completions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
             image_id INTEGER NOT NULL,
             container_id TEXT NOT NULL,
             task_id TEXT NOT NULL,
             completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             evidence TEXT,
-            FOREIGN KEY(user_id) REFERENCES users(id),
             FOREIGN KEY(image_id) REFERENCES docker_images(id),
-            UNIQUE(user_id, image_id, task_id)
+            UNIQUE(container_id, task_id)
         )`);
+
+        // Migrate task_completions if it still has the old user_id column
+        const tcCols = await new Promise((resolve, reject) => {
+            db.all('PRAGMA table_info(task_completions)', (err, rows) => {
+                if (err) reject(err); else resolve(rows || []);
+            });
+        });
+        if (tcCols.some(c => c.name === 'user_id')) {
+            logger.info('Migrating task_completions schema...');
+            await runAsync(`CREATE TABLE task_completions_v2 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                image_id INTEGER NOT NULL,
+                container_id TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                evidence TEXT,
+                FOREIGN KEY(image_id) REFERENCES docker_images(id),
+                UNIQUE(container_id, task_id)
+            )`);
+            await runAsync(`INSERT OR IGNORE INTO task_completions_v2
+                (id, image_id, container_id, task_id, completed_at, evidence)
+                SELECT id, image_id, container_id, task_id, completed_at, evidence
+                FROM task_completions`);
+            await runAsync('DROP TABLE task_completions');
+            await runAsync('ALTER TABLE task_completions_v2 RENAME TO task_completions');
+            logger.info('task_completions migration completed');
+        }
+
+        // Migrate containers if it still has the old user_id column
+        const cCols = await new Promise((resolve, reject) => {
+            db.all('PRAGMA table_info(containers)', (err, rows) => {
+                if (err) reject(err); else resolve(rows || []);
+            });
+        });
+        if (cCols.some(c => c.name === 'user_id')) {
+            logger.info('Migrating containers schema...');
+            await runAsync(`CREATE TABLE containers_v2 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                container_id TEXT UNIQUE NOT NULL,
+                image_id INTEGER,
+                subdomain TEXT UNIQUE NOT NULL,
+                callback_token TEXT NOT NULL,
+                status TEXT CHECK(status IN ('running', 'stopped', 'completed')) NOT NULL,
+                host_port TEXT,
+                last_activity DATETIME DEFAULT CURRENT_TIMESTAMP,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(image_id) REFERENCES docker_images(id)
+            )`);
+            await runAsync(`INSERT OR IGNORE INTO containers_v2
+                (id, container_id, image_id, subdomain, callback_token, status, host_port, last_activity, created_at)
+                SELECT id, container_id, image_id, subdomain, callback_token, status, host_port, last_activity, created_at
+                FROM containers`);
+            await runAsync('DROP TABLE containers');
+            await runAsync('ALTER TABLE containers_v2 RENAME TO containers');
+            logger.info('containers migration completed');
+        }
 
         await runAsync(`CREATE TABLE IF NOT EXISTS system_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
