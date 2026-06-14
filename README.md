@@ -37,6 +37,7 @@ npm run dev      # Development (auto-reload with nodemon)
 
 ## How It Works
 
+
 ### Exercise Lifecycle
 
 1. Admin uploads an exercise package (`.tar.gz` / `.zip`) containing a `Dockerfile`, `metadata.json`, and the exercise code.
