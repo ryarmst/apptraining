@@ -163,6 +163,12 @@ const initializeDatabase = async () => {
             [ADMIN_USERNAME, hashedPassword]
         );
 
+        // Apply ADMIN_PASSWORD from env on every startup (INSERT OR IGNORE only runs once)
+        await runAsync(
+            `UPDATE users SET password = ? WHERE username = ? AND role = 'admin'`,
+            [hashedPassword, ADMIN_USERNAME]
+        );
+
         logger.info('Database initialized successfully');
     } catch (error) {
         logger.error('Database initialization failed:', error);

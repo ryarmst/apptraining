@@ -41,7 +41,7 @@
         <div class="card shadow mb-4">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Exercise Images</h5>
-                <button class="btn btn-sm btn-outline-primary" onclick="fetchHealth()">Check Docker Health</button>
+                <button class="btn btn-sm btn-outline-primary" onclick="fetchImages()">Refresh</button>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -132,27 +132,39 @@
         });
 
         let healthData = {};
+        let activeContainersByImage = {};
 
         async function fetchImages() {
             try {
-                const response = await fetch('/api/exercises');
-                const data = await response.json();
-                displayImages(data.exercises || []);
+                const [exercisesResponse, healthResponse, containersResponse] = await Promise.all([
+                    fetch('/api/exercises'),
+                    fetch('/api/admin/images/health'),
+                    fetch('/api/admin/containers')
+                ]);
+
+                const exercisesData = await exercisesResponse.json();
+                const healthResult = healthResponse.ok ? await healthResponse.json() : { images: [] };
+                const containersResult = containersResponse.ok ? await containersResponse.json() : { containers: [] };
+
+                healthData = {};
+                (healthResult.images || []).forEach(img => { healthData[img.id] = img; });
+
+                activeContainersByImage = {};
+                (containersResult.containers || []).forEach(container => {
+                    if (!activeContainersByImage[container.image_id]) {
+                        activeContainersByImage[container.image_id] = [];
+                    }
+                    activeContainersByImage[container.image_id].push(container);
+                });
+
+                displayImages(exercisesData.exercises || []);
             } catch (error) {
                 console.error('Error:', error);
             }
         }
 
         async function fetchHealth() {
-            try {
-                const response = await fetch('/api/admin/images/health');
-                const data = await response.json();
-                healthData = {};
-                (data.images || []).forEach(img => { healthData[img.id] = img; });
-                fetchImages();
-            } catch (error) {
-                console.error('Error:', error);
-            }
+            fetchImages();
         }
 
         function displayImages(images) {
@@ -164,9 +176,18 @@
                         ? `<span class="badge bg-success">Available</span>`
                         : `<span class="badge bg-danger">Missing</span>`)
                     : '<span class="badge bg-secondary">Unknown</span>';
-                const activeCount = health ? health.active_containers : '?';
+                const activeContainers = activeContainersByImage[img.id] || [];
+                const activeCount = activeContainers.length || (health ? health.active_containers : 0);
                 const sizeStr = health && health.size ? (health.size / 1024 / 1024).toFixed(1) + ' MB' : '';
                 const canLaunch = !health || health.docker_status === 'available';
+                const activeControls = activeContainers.length
+                    ? `<div class="mt-1">${activeContainers.map(c => `
+                        <div class="d-flex gap-1 align-items-center mb-1">
+                            <a href="${buildContainerUrl(c.subdomain)}" target="_blank" class="small font-monospace text-truncate" style="max-width: 190px">${c.subdomain}</a>
+                            <button onclick="stopContainer('${c.container_id}')" class="btn btn-outline-danger btn-sm py-0">Stop</button>
+                        </div>
+                    `).join('')}</div>`
+                    : '';
 
                 return `<tr>
                     <td><strong>${img.name}</strong><br><small class="text-muted">v${img.version || '?'}</small></td>
@@ -174,9 +195,9 @@
                     <td><span class="badge bg-info">${img.level}</span></td>
                     <td>${img.tasks_total} tasks</td>
                     <td>${dockerBadge} ${sizeStr ? '<br><small class="text-muted">' + sizeStr + '</small>' : ''}</td>
-                    <td>${activeCount}</td>
+                    <td>${activeCount}${activeControls}</td>
                     <td class="d-flex gap-1 flex-wrap">
-                        <button onclick="launchInstance(${img.id})" class="btn btn-success btn-sm" ${canLaunch ? '' : 'disabled'}>Launch</button>
+                        <button onclick="launchInstance(${img.id}, this)" class="btn btn-success btn-sm" ${canLaunch ? '' : 'disabled'}>Launch</button>
                         <a href="/admin/challenges.html?imageId=${img.id}" class="btn btn-outline-primary btn-sm">Challenges</a>
                         <button onclick="deleteImage(${img.id})" class="btn btn-danger btn-sm">Delete</button>
                     </td>
@@ -184,9 +205,14 @@
             }).join('');
         }
 
-        async function launchInstance(imageId) {
+        function buildContainerUrl(subdomain) {
+            const port = window.location.port ? ':' + window.location.port : '';
+            const hostname = subdomain.includes('.') ? subdomain : `${subdomain}.${window.location.hostname}`;
+            return `${window.location.protocol}//${hostname}${port}`;
+        }
+
+        async function launchInstance(imageId, btn) {
             try {
-                const btn = event.target;
                 btn.disabled = true;
                 btn.textContent = 'Launching...';
 
@@ -195,11 +221,8 @@
 
                 if (!response.ok) throw new Error(data.error || 'Launch failed');
 
-                const protocol = window.location.protocol;
-                const hostParts = window.location.hostname.split('.');
-                const baseDomain = hostParts.length > 1 ? hostParts.slice(-2).join('.') : window.location.hostname;
                 const port = window.location.port ? ':' + window.location.port : '';
-                const url = `${protocol}//${data.subdomain}${port}`;
+                const url = `${window.location.protocol}//${data.subdomain}${port}`;
 
                 document.getElementById('instance-url').value = url;
                 const modal = new bootstrap.Modal(document.getElementById('launchModal'));
@@ -209,8 +232,20 @@
             } catch (err) {
                 alert('Error: ' + err.message);
             } finally {
-                event.target.disabled = false;
-                event.target.textContent = 'Launch';
+                btn.disabled = false;
+                btn.textContent = 'Launch';
+            }
+        }
+
+        async function stopContainer(containerId) {
+            if (!confirm('Stop this container?')) return;
+            try {
+                const response = await fetch(`/api/admin/containers/${containerId}/stop`, { method: 'POST' });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.error || 'Stop failed');
+                fetchImages();
+            } catch (err) {
+                alert('Error: ' + err.message);
             }
         }
 

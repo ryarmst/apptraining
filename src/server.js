@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const express = require('express');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
@@ -9,7 +11,6 @@ const { initializeDatabase } = require('./db/init');
 const { setupDockerEvents, setupPeriodicCleanup } = require('./services/docker');
 const { logger } = require('./utils/logger');
 const { createSubdomainHandler } = require('./middleware/subdomain');
-require('dotenv').config();
 
 // Ensure required directories exist
 ['data', 'logs', 'uploads/exercises'].forEach(dir => {
