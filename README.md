@@ -48,7 +48,7 @@ npm run dev      # Development (auto-reload with nodemon)
    - Environment variables for reporting task completions
 4. As users work through the exercise, the container reports completed tasks via `check-completion.sh` or direct API calls.
 5. The platform tracks individual task completions per user per exercise.
-6. Containers auto-stop after 15 min idle or 2 hours total lifetime.
+6. Containers auto-stop after 60 min idle or 2 hours total lifetime.
 
 ### Task Completion Tracking
 
@@ -79,6 +79,8 @@ Exercises are packaged as archives with this structure:
 exercise.tar.gz
 ├── Dockerfile          # Must expose port 8080
 ├── metadata.json       # Exercise metadata and task definitions
+├── README.md           # Lab purpose, topic, and architecture
+├── CHALLENGES.json     # Challenge documentation and solutions
 ├── check-completion.sh # Task reporting script (provided in examples/)
 ├── package.json        # Dependencies (if Node-based)
 ├── server.js           # Main app (or any entry point)
@@ -158,7 +160,7 @@ exercise.tar.gz
 
 ## Container Management
 
-- **Idle timeout**: Containers stop after 15 minutes of inactivity (configurable)
+- **Idle timeout**: Containers stop after at least 60 minutes of inactivity (configurable upward)
 - **Max lifetime**: 2 hours per container (configurable)
 - **Per-user limit**: 3 concurrent containers (configurable)
 - **Periodic cleanup**: Every 6 hours, orphaned containers are removed and stale DB records cleaned

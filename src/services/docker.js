@@ -14,8 +14,16 @@ try {
 }
 
 const PLATFORM_DOMAIN = process.env.PLATFORM_DOMAIN || 'training.local';
-const CONTAINER_IDLE_TIMEOUT = (parseInt(process.env.CONTAINER_IDLE_TIMEOUT_MINUTES, 10) || 15) * 60 * 1000;
-const CONTAINER_MAX_LIFETIME = (parseInt(process.env.CONTAINER_MAX_LIFETIME_HOURS, 10) || 2) * 60 * 60 * 1000;
+const MIN_CONTAINER_IDLE_TIMEOUT_MINUTES = 60;
+const MIN_CONTAINER_MAX_LIFETIME_HOURS = 1;
+const CONTAINER_IDLE_TIMEOUT = Math.max(
+    parseInt(process.env.CONTAINER_IDLE_TIMEOUT_MINUTES, 10) || MIN_CONTAINER_IDLE_TIMEOUT_MINUTES,
+    MIN_CONTAINER_IDLE_TIMEOUT_MINUTES
+) * 60 * 1000;
+const CONTAINER_MAX_LIFETIME = Math.max(
+    parseInt(process.env.CONTAINER_MAX_LIFETIME_HOURS, 10) || 2,
+    MIN_CONTAINER_MAX_LIFETIME_HOURS
+) * 60 * 60 * 1000;
 
 class DockerService {
     static isAvailable() {
@@ -172,7 +180,7 @@ class DockerService {
         try {
             const containerInfo = await new Promise((resolve, reject) => {
                 db.get(
-                    'SELECT image_id, subdomain FROM containers WHERE container_id = ?',
+                    'SELECT image_id, subdomain, status FROM containers WHERE container_id = ?',
                     [containerId],
                     (err, row) => {
                         if (err) reject(err);
@@ -209,7 +217,7 @@ class DockerService {
             await new Promise((resolve, reject) => {
                 db.run(
                     'UPDATE containers SET status = ? WHERE container_id = ?',
-                    ['stopped', containerId],
+                    [containerInfo?.status === 'completed' ? 'completed' : 'stopped', containerId],
                     (err) => {
                         if (err) reject(err);
                         resolve();
@@ -435,7 +443,11 @@ class DockerService {
                 db.run(
                     `DELETE FROM containers
                      WHERE status = 'stopped'
-                     AND datetime(created_at) < datetime('now', '-24 hours')`,
+                     AND datetime(created_at) < datetime('now', '-24 hours')
+                     AND NOT EXISTS (
+                         SELECT 1 FROM task_completions
+                         WHERE task_completions.container_id = containers.container_id
+                     )`,
                     (err) => {
                         if (err) reject(err);
                         resolve();

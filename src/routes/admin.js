@@ -89,7 +89,7 @@ router.get('/challenges', isAdmin, async (req, res) => {
                 db.all(
                     `SELECT container_id, subdomain, status, created_at
                      FROM containers
-                     WHERE image_id = ? AND status IN ('running', 'completed')
+                     WHERE image_id = ?
                      ORDER BY created_at DESC`,
                     [img.id],
                     (err, rows) => { if (err) reject(err); else resolve(rows || []); }
@@ -109,14 +109,32 @@ router.get('/challenges', isAdmin, async (req, res) => {
                 const completionMap = {};
                 for (const t of completions) completionMap[t.task_id] = t;
 
+                const completedGoalCompletions = goals
+                    .map(g => completionMap[g.id])
+                    .filter(Boolean);
+                const tasksCompleted = completedGoalCompletions.length;
+                const tasksTotal = goals.length;
+                const solved = tasksTotal > 0 && tasksCompleted >= tasksTotal;
+                const solvedAt = solved
+                    ? completedGoalCompletions
+                        .map(t => new Date(t.completed_at))
+                        .reduce((latest, current) => current > latest ? current : latest)
+                    : null;
+                const startedAt = new Date(c.created_at);
+                const solveDurationMs = solvedAt ? solvedAt.getTime() - startedAt.getTime() : null;
+
                 enrichedContainers.push({
                     container_id: c.container_id,
                     subdomain: c.subdomain,
                     url: `${c.subdomain}.${PLATFORM_DOMAIN}`,
                     status: c.status,
                     created_at: c.created_at,
-                    tasks_completed: completions.length,
-                    tasks_total: goals.length,
+                    solved,
+                    solved_at: solvedAt ? solvedAt.toISOString() : null,
+                    solve_duration_ms: solveDurationMs,
+                    solve_duration_minutes: solveDurationMs !== null ? Math.max(0, Math.round(solveDurationMs / 60000)) : null,
+                    tasks_completed: tasksCompleted,
+                    tasks_total: tasksTotal,
                     tasks: goals.map(g => ({
                         id: g.id,
                         description: g.description,

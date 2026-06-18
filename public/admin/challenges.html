@@ -10,10 +10,10 @@
         .task-badge { cursor: default; font-size: .8rem; }
         .task-badge.done { cursor: pointer; }
         .task-badge.done:hover { opacity: .85; }
-        .container-row { border-left: 3px solid #0d6efd; padding-left: .75rem; margin-bottom: .75rem; }
-        .container-row.all-done { border-left-color: #198754; }
         .progress-thin { height: 4px; }
         .refresh-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #198754; margin-right: 4px; animation: pulse 2s infinite; }
+        .results-table td { vertical-align: middle; }
+        .instance-url { max-width: 260px; display: inline-block; }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
     </style>
 </head>
@@ -35,15 +35,50 @@
             <h2 id="page-title">Challenge Status</h2>
             <div class="d-flex align-items-center gap-3">
                 <small class="text-muted"><span class="refresh-dot"></span>Auto-refreshes every 10s</small>
+                <button class="btn btn-sm btn-outline-success" onclick="exportCsv()">Export CSV</button>
                 <button class="btn btn-sm btn-outline-primary" onclick="loadData()">Refresh Now</button>
             </div>
         </div>
 
-        <div id="no-containers" class="alert alert-info d-none">
-            No active instances found. Launch an instance from the <a href="/admin/images.html">Images</a> page.
+        <div id="summary-card" class="card shadow-sm mb-3 d-none">
+            <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <div>
+                    <h5 class="mb-1" id="summary-fraction">0/0 solved</h5>
+                    <small class="text-muted" id="summary-detail">No challenge instances yet.</small>
+                </div>
+                <div class="progress flex-grow-1 progress-thin" style="min-width: 180px; max-width: 420px;">
+                    <div id="summary-progress" class="progress-bar bg-success" style="width:0%"></div>
+                </div>
+            </div>
         </div>
 
-        <div id="exercises-container"></div>
+        <div id="no-containers" class="alert alert-info d-none">
+            No challenge instances found. Launch an instance from the <a href="/admin/images.html">Images</a> page.
+        </div>
+
+        <div id="results-card" class="card shadow d-none">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover results-table mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Status</th>
+                                <th>Exercise</th>
+                                <th>Instance</th>
+                                <th>Progress</th>
+                                <th>Started</th>
+                                <th>Solved</th>
+                                <th>Solved At</th>
+                                <th>Time To Solve</th>
+                                <th>Tasks</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Evidence Modal -->
@@ -66,6 +101,7 @@
     <script>
         const params = new URLSearchParams(window.location.search);
         const imageId = params.get('imageId');
+        let currentRows = [];
 
         checkAdminAuth();
 
@@ -88,53 +124,60 @@
         }
 
         function render(exercises) {
-            // Filter to exercises that have containers
-            const active = exercises.filter(ex => ex.containers.length > 0);
-
-            // Update page title for single-exercise view
             if (imageId && exercises.length === 1) {
                 document.getElementById('page-title').textContent =
                     `Challenge Status: ${exercises[0].name}`;
             }
 
+            currentRows = exercises
+                .flatMap(ex => ex.containers.map(c => ({ exercise: ex, container: c })))
+                .sort((a, b) => {
+                    if (a.container.solved !== b.container.solved) return a.container.solved ? 1 : -1;
+                    if (a.container.solved && b.container.solved) {
+                        return new Date(b.container.solved_at).getTime() - new Date(a.container.solved_at).getTime();
+                    }
+                    const aProgress = progressRatio(a.container);
+                    const bProgress = progressRatio(b.container);
+                    if (aProgress !== bProgress) return bProgress - aProgress;
+                    return new Date(b.container.created_at).getTime() - new Date(a.container.created_at).getTime();
+                });
+
             const noContainers = document.getElementById('no-containers');
-            if (active.length === 0) {
+            const summaryCard = document.getElementById('summary-card');
+            const resultsCard = document.getElementById('results-card');
+
+            if (currentRows.length === 0) {
                 noContainers.classList.remove('d-none');
-                document.getElementById('exercises-container').innerHTML = '';
+                summaryCard.classList.add('d-none');
+                resultsCard.classList.add('d-none');
+                document.getElementById('results-table-body').innerHTML = '';
                 return;
             }
-            noContainers.classList.add('d-none');
 
-            document.getElementById('exercises-container').innerHTML = active.map(ex => `
-                <div class="card shadow mb-4">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <div>
-                            <h5 class="mb-0 d-inline">${ex.name}</h5>
-                            <span class="badge bg-info ms-2">${ex.level}</span>
-                            ${!imageId ? `<a href="/admin/challenges.html?imageId=${ex.id}" class="ms-2 small text-decoration-none">view only this</a>` : ''}
-                        </div>
-                        <small class="text-muted">${ex.containers.length} instance${ex.containers.length !== 1 ? 's' : ''}</small>
-                    </div>
-                    <div class="card-body pb-1">
-                        ${ex.containers.map(c => renderContainer(c, ex)).join('')}
-                    </div>
-                </div>
-            `).join('');
+            noContainers.classList.add('d-none');
+            summaryCard.classList.remove('d-none');
+            resultsCard.classList.remove('d-none');
+
+            const solvedCount = currentRows.filter(row => row.container.solved).length;
+            const pct = Math.round((solvedCount / currentRows.length) * 100);
+            document.getElementById('summary-fraction').textContent = `${solvedCount}/${currentRows.length} solved (${pct}%)`;
+            document.getElementById('summary-detail').textContent =
+                `${currentRows.length - solvedCount} unsolved instance${currentRows.length - solvedCount === 1 ? '' : 's'} shown first`;
+            document.getElementById('summary-progress').style.width = `${pct}%`;
+            document.getElementById('results-table-body').innerHTML = currentRows.map(renderRow).join('');
         }
 
-        function renderContainer(c, ex) {
-            const protocol = window.location.protocol;
+        function renderRow(row) {
+            const ex = row.exercise;
+            const c = row.container;
             const port = window.location.port ? ':' + window.location.port : '';
-            const url = `${protocol}//${c.url}${port}`;
-            const allDone = c.tasks_total > 0 && c.tasks_completed >= c.tasks_total;
-            const pct = c.tasks_total > 0 ? Math.round(c.tasks_completed / c.tasks_total * 100) : 0;
-            const elapsed = Math.floor((Date.now() - new Date(c.created_at).getTime()) / 60000);
-            const statusBadge = allDone
+            const url = `${window.location.protocol}//${c.url}${port}`;
+            const pct = Math.round(progressRatio(c) * 100);
+            const statusBadge = c.solved
                 ? '<span class="badge bg-success">Completed</span>'
                 : c.status === 'running'
                     ? '<span class="badge bg-primary">Running</span>'
                     : '<span class="badge bg-secondary">Stopped</span>';
-
             const taskPills = c.tasks.map(t => {
                 const cls = t.completed ? 'bg-success done' : 'bg-secondary';
                 const onclick = t.completed
@@ -149,25 +192,35 @@
             }).join('');
 
             return `
-                <div class="container-row ${allDone ? 'all-done' : ''} py-2">
-                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-                        <div>
-                            <a href="${url}" target="_blank" class="font-monospace small text-decoration-none">${c.url}</a>
-                            <span class="ms-2">${statusBadge}</span>
-                            <span class="ms-2 text-muted small">${elapsed}m ago</span>
+                <tr class="${c.solved ? '' : 'table-warning'}">
+                    <td>${statusBadge}</td>
+                    <td>
+                        <strong>${escHtml(ex.name)}</strong>
+                        <span class="badge bg-info ms-1">${escHtml(ex.level)}</span>
+                        ${!imageId ? `<br><a href="/admin/challenges.html?imageId=${ex.id}" class="small text-decoration-none">view only this</a>` : ''}
+                    </td>
+                    <td>
+                        <a href="${url}" target="_blank" class="font-monospace small text-decoration-none text-truncate instance-url">${escHtml(c.url)}</a>
+                    </td>
+                    <td style="min-width: 120px;">
+                        <small class="text-muted">${c.tasks_completed}/${c.tasks_total}</small>
+                        <div class="progress progress-thin mt-1">
+                            <div class="progress-bar ${c.solved ? 'bg-success' : 'bg-primary'}" style="width:${pct}%"></div>
                         </div>
-                        <div class="d-flex align-items-center gap-3">
-                            <div class="text-end">
-                                <small class="text-muted">${c.tasks_completed}/${c.tasks_total} tasks</small>
-                                <div class="progress progress-thin mt-1" style="width:100px">
-                                    <div class="progress-bar ${allDone ? 'bg-success' : 'bg-primary'}" style="width:${pct}%"></div>
-                                </div>
-                            </div>
-                            ${c.status === 'running' ? `<button onclick="stopContainer('${c.container_id}')" class="btn btn-danger btn-sm">Stop</button>` : ''}
-                        </div>
-                    </div>
-                    <div class="mt-2">${taskPills || '<small class="text-muted">No tasks defined</small>'}</div>
-                </div>`;
+                    </td>
+                    <td>${formatDate(c.created_at)}</td>
+                    <td>${c.solved ? 'Yes' : 'No'}</td>
+                    <td>${c.solved_at ? formatDate(c.solved_at) : '-'}</td>
+                    <td>${c.solve_duration_minutes !== null ? formatDuration(c.solve_duration_minutes) : '-'}</td>
+                    <td>${taskPills || '<small class="text-muted">No tasks defined</small>'}</td>
+                    <td>
+                        ${c.status === 'running' ? `<button onclick="stopContainer('${c.container_id}')" class="btn btn-danger btn-sm">Stop</button>` : ''}
+                    </td>
+                </tr>`;
+        }
+
+        function progressRatio(c) {
+            return c.tasks_total > 0 ? c.tasks_completed / c.tasks_total : 0;
         }
 
         function showEvidence(taskJson) {
@@ -188,6 +241,56 @@
                 ${evidenceHtml}
             `;
             new bootstrap.Modal(document.getElementById('evidenceModal')).show();
+        }
+
+        function formatDate(value) {
+            return value ? new Date(value).toLocaleString() : '-';
+        }
+
+        function formatDuration(minutes) {
+            if (minutes < 60) return `${minutes}m`;
+            const hours = Math.floor(minutes / 60);
+            const mins = minutes % 60;
+            return mins ? `${hours}h ${mins}m` : `${hours}h`;
+        }
+
+        function exportCsv() {
+            const headers = [
+                'exercise',
+                'level',
+                'instance_url',
+                'status',
+                'solved',
+                'tasks_completed',
+                'tasks_total',
+                'started_at',
+                'solved_at',
+                'solve_duration_minutes'
+            ];
+            const rows = currentRows.map(({ exercise, container }) => [
+                exercise.name,
+                exercise.level,
+                container.url,
+                container.status,
+                container.solved ? 'yes' : 'no',
+                container.tasks_completed,
+                container.tasks_total,
+                container.created_at,
+                container.solved_at || '',
+                container.solve_duration_minutes ?? ''
+            ]);
+            const csv = [headers, ...rows].map(row => row.map(csvCell).join(',')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `challenge-results-${new Date().toISOString().slice(0, 10)}.csv`;
+            link.click();
+            URL.revokeObjectURL(link.href);
+        }
+
+        function csvCell(value) {
+            const text = String(value ?? '');
+            return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
         }
 
         function escHtml(s) {
