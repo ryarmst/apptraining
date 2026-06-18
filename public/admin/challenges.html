@@ -7,9 +7,6 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="/css/style.css" rel="stylesheet">
     <style>
-        .task-badge { cursor: default; font-size: .8rem; }
-        .task-badge.done { cursor: pointer; }
-        .task-badge.done:hover { opacity: .85; }
         .progress-thin { height: 4px; }
         .refresh-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #198754; margin-right: 4px; animation: pulse 2s infinite; }
         .instance-card.unsolved { border-left: 4px solid #ffc107; }
@@ -179,7 +176,9 @@
                                 <div class="progress progress-thin mt-1 mb-1" style="width: 180px;">
                                     <div class="progress-bar ${c.solved ? 'bg-success' : 'bg-primary'}" style="width:${pct}%"></div>
                                 </div>
-                                ${c.status === 'running' ? `<button onclick="stopContainer('${c.container_id}')" class="btn btn-danger btn-sm mt-1">Stop Instance</button>` : ''}
+                                ${c.status === 'running'
+                                    ? `<button onclick="stopContainer('${c.container_id}')" class="btn btn-danger btn-sm mt-1">Stop Instance</button>`
+                                    : `<button onclick="clearChallengeData('${c.container_id}')" class="btn btn-outline-danger btn-sm mt-1">Clear Data</button>`}
                             </div>
                         </div>
                         <div class="row g-2 mt-2 instance-meta">
@@ -274,9 +273,6 @@
                 'level',
                 'instance_url',
                 'instance_status',
-                'instance_solved',
-                'instance_tasks_completed',
-                'instance_tasks_total',
                 'started_at',
                 'solved_at',
                 'solve_duration_minutes',
@@ -284,16 +280,14 @@
                 'task_description',
                 'task_completed',
                 'task_completed_at',
-                'task_elapsed_minutes',
-                'task_hint'
+                'task_elapsed_minutes'
             ];
             const rows = currentInstances.flatMap(({ exercise, container }) => {
                 const tasks = container.tasks.length ? container.tasks : [{
                     id: '',
                     description: '',
                     completed: false,
-                    completed_at: null,
-                    hint: ''
+                    completed_at: null
                 }];
 
                 return tasks.map(task => {
@@ -306,9 +300,6 @@
                         exercise.level,
                         container.url,
                         container.status,
-                        container.solved ? 'yes' : 'no',
-                        container.tasks_completed,
-                        container.tasks_total,
                         container.created_at,
                         container.solved_at || '',
                         container.solve_duration_minutes ?? '',
@@ -316,8 +307,7 @@
                         task.description,
                         task.completed ? 'yes' : 'no',
                         task.completed_at || '',
-                        taskElapsed,
-                        task.hint || ''
+                        taskElapsed
                     ];
                 });
             });
@@ -346,6 +336,15 @@
             try {
                 const r = await fetch(`/api/admin/containers/${id}/stop`, { method: 'POST' });
                 if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Stop failed'); }
+                loadData();
+            } catch (e) { alert('Error: ' + e.message); }
+        }
+
+        async function clearChallengeData(id) {
+            if (!confirm('Clear this challenge instance and all recorded task completions?')) return;
+            try {
+                const r = await fetch(`/api/admin/challenges/${id}`, { method: 'DELETE' });
+                if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Clear failed'); }
                 loadData();
             } catch (e) { alert('Error: ' + e.message); }
         }

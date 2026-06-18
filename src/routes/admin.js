@@ -162,6 +162,51 @@ router.get('/challenges', isAdmin, async (req, res) => {
     }
 });
 
+router.delete('/challenges/:containerId', isAdmin, async (req, res) => {
+    try {
+        const { containerId } = req.params;
+        const run = (sql, params = []) => new Promise((resolve, reject) => {
+            db.run(sql, params, function (err) {
+                if (err) reject(err); else resolve(this);
+            });
+        });
+
+        const container = await new Promise((resolve, reject) => {
+            db.get(
+                'SELECT container_id, status FROM containers WHERE container_id = ?',
+                [containerId],
+                (err, row) => {
+                    if (err) reject(err); else resolve(row);
+                }
+            );
+        });
+
+        if (!container) {
+            return res.status(404).json({ error: 'Challenge instance not found' });
+        }
+
+        if (container.status === 'running') {
+            return res.status(400).json({ error: 'Stop the container before clearing challenge data' });
+        }
+
+        if (container.status === 'completed') {
+            try {
+                await DockerService.stopContainer(containerId);
+            } catch (error) {
+                logger.warn('Could not stop completed container while clearing challenge data:', error.message);
+            }
+        }
+
+        await run('DELETE FROM task_completions WHERE container_id = ?', [containerId]);
+        await run('DELETE FROM containers WHERE container_id = ?', [containerId]);
+
+        res.json({ message: 'Challenge data cleared successfully' });
+    } catch (error) {
+        logger.error('Error clearing challenge data:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 router.get('/images/health', isAdmin, async (req, res) => {
     try {
         const health = await DockerService.getImageHealth();
