@@ -301,8 +301,8 @@ The page auto-refreshes every 10 seconds and shows:
 - Every launched instance for the exercise
 - Unsolved instances first, followed by solved instances
 - The solved fraction across all shown instances
-- Started time, solved time, and time-to-solve for solved instances
-- A progress bar showing tasks completed / total
+- One table/block per instance with exercise title, status, progress, started time, solved time, and time-to-solve
+- Individual task rows for each tracked exercise goal
 - A CSV export for offline tracking
 - Completed task pills that open a detail panel with timestamps and evidence
 

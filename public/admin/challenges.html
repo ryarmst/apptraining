@@ -12,8 +12,10 @@
         .task-badge.done:hover { opacity: .85; }
         .progress-thin { height: 4px; }
         .refresh-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #198754; margin-right: 4px; animation: pulse 2s infinite; }
-        .results-table td { vertical-align: middle; }
-        .instance-url { max-width: 260px; display: inline-block; }
+        .instance-card.unsolved { border-left: 4px solid #ffc107; }
+        .instance-card.solved { border-left: 4px solid #198754; }
+        .instance-meta { font-size: .875rem; }
+        .task-table td { vertical-align: middle; }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
     </style>
 </head>
@@ -56,29 +58,7 @@
             No challenge instances found. Launch an instance from the <a href="/admin/images.html">Images</a> page.
         </div>
 
-        <div id="results-card" class="card shadow d-none">
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover results-table mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Status</th>
-                                <th>Exercise</th>
-                                <th>Instance</th>
-                                <th>Progress</th>
-                                <th>Started</th>
-                                <th>Solved</th>
-                                <th>Solved At</th>
-                                <th>Time To Solve</th>
-                                <th>Tasks</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="results-table-body"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+        <div id="instances-container"></div>
     </div>
 
     <!-- Evidence Modal -->
@@ -101,7 +81,8 @@
     <script>
         const params = new URLSearchParams(window.location.search);
         const imageId = params.get('imageId');
-        let currentRows = [];
+        let currentInstances = [];
+        let evidenceItems = [];
 
         checkAdminAuth();
 
@@ -129,7 +110,7 @@
                     `Challenge Status: ${exercises[0].name}`;
             }
 
-            currentRows = exercises
+            currentInstances = exercises
                 .flatMap(ex => ex.containers.map(c => ({ exercise: ex, container: c })))
                 .sort((a, b) => {
                     if (a.container.solved !== b.container.solved) return a.container.solved ? 1 : -1;
@@ -144,30 +125,29 @@
 
             const noContainers = document.getElementById('no-containers');
             const summaryCard = document.getElementById('summary-card');
-            const resultsCard = document.getElementById('results-card');
+            const instancesContainer = document.getElementById('instances-container');
 
-            if (currentRows.length === 0) {
+            if (currentInstances.length === 0) {
                 noContainers.classList.remove('d-none');
                 summaryCard.classList.add('d-none');
-                resultsCard.classList.add('d-none');
-                document.getElementById('results-table-body').innerHTML = '';
+                instancesContainer.innerHTML = '';
                 return;
             }
 
             noContainers.classList.add('d-none');
             summaryCard.classList.remove('d-none');
-            resultsCard.classList.remove('d-none');
 
-            const solvedCount = currentRows.filter(row => row.container.solved).length;
-            const pct = Math.round((solvedCount / currentRows.length) * 100);
-            document.getElementById('summary-fraction').textContent = `${solvedCount}/${currentRows.length} solved (${pct}%)`;
+            const solvedCount = currentInstances.filter(row => row.container.solved).length;
+            const pct = Math.round((solvedCount / currentInstances.length) * 100);
+            document.getElementById('summary-fraction').textContent = `${solvedCount}/${currentInstances.length} instances solved (${pct}%)`;
             document.getElementById('summary-detail').textContent =
-                `${currentRows.length - solvedCount} unsolved instance${currentRows.length - solvedCount === 1 ? '' : 's'} shown first`;
+                `${currentInstances.length - solvedCount} unsolved instance${currentInstances.length - solvedCount === 1 ? '' : 's'} shown first`;
             document.getElementById('summary-progress').style.width = `${pct}%`;
-            document.getElementById('results-table-body').innerHTML = currentRows.map(renderRow).join('');
+            evidenceItems = [];
+            instancesContainer.innerHTML = currentInstances.map(renderInstance).join('');
         }
 
-        function renderRow(row) {
+        function renderInstance(row) {
             const ex = row.exercise;
             const c = row.container;
             const port = window.location.port ? ':' + window.location.port : '';
@@ -178,44 +158,77 @@
                 : c.status === 'running'
                     ? '<span class="badge bg-primary">Running</span>'
                     : '<span class="badge bg-secondary">Stopped</span>';
-            const taskPills = c.tasks.map(t => {
-                const cls = t.completed ? 'bg-success done' : 'bg-secondary';
-                const onclick = t.completed
-                    ? `onclick="showEvidence(${JSON.stringify(JSON.stringify(t))})"`
-                    : '';
-                const title = t.completed
-                    ? `Completed: ${new Date(t.completed_at).toLocaleString()}${t.evidence ? ' (click for evidence)' : ''}`
-                    : `Pending: ${t.description}`;
-                return `<span class="badge ${cls} task-badge me-1 mb-1" ${onclick} title="${escHtml(title)}">
-                    ${t.completed ? '&#10003;' : '&#9679;'} ${escHtml(t.description)}
-                </span>`;
-            }).join('');
+            const taskRows = c.tasks.length
+                ? c.tasks.map(t => renderTaskRow(t, c)).join('')
+                : `<tr><td colspan="6" class="text-muted">No tasks defined for this exercise.</td></tr>`;
 
             return `
-                <tr class="${c.solved ? '' : 'table-warning'}">
-                    <td>${statusBadge}</td>
-                    <td>
-                        <strong>${escHtml(ex.name)}</strong>
-                        <span class="badge bg-info ms-1">${escHtml(ex.level)}</span>
-                        ${!imageId ? `<br><a href="/admin/challenges.html?imageId=${ex.id}" class="small text-decoration-none">view only this</a>` : ''}
-                    </td>
-                    <td>
-                        <a href="${url}" target="_blank" class="font-monospace small text-decoration-none text-truncate instance-url">${escHtml(c.url)}</a>
-                    </td>
-                    <td style="min-width: 120px;">
-                        <small class="text-muted">${c.tasks_completed}/${c.tasks_total}</small>
-                        <div class="progress progress-thin mt-1">
-                            <div class="progress-bar ${c.solved ? 'bg-success' : 'bg-primary'}" style="width:${pct}%"></div>
+                <div class="card shadow mb-4 instance-card ${c.solved ? 'solved' : 'unsolved'}">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+                            <div>
+                                <h5 class="mb-1">${escHtml(ex.name)}</h5>
+                                <div class="instance-meta text-muted">
+                                    <span class="badge bg-info me-2">${escHtml(ex.level)}</span>
+                                    ${statusBadge}
+                                    ${!imageId ? `<a href="/admin/challenges.html?imageId=${ex.id}" class="ms-2 text-decoration-none">view only this exercise</a>` : ''}
+                                </div>
+                            </div>
+                            <div class="text-end instance-meta">
+                                <div><strong>Progress:</strong> ${c.tasks_completed}/${c.tasks_total} (${pct}%)</div>
+                                <div class="progress progress-thin mt-1 mb-1" style="width: 180px;">
+                                    <div class="progress-bar ${c.solved ? 'bg-success' : 'bg-primary'}" style="width:${pct}%"></div>
+                                </div>
+                                ${c.status === 'running' ? `<button onclick="stopContainer('${c.container_id}')" class="btn btn-danger btn-sm mt-1">Stop Instance</button>` : ''}
+                            </div>
                         </div>
-                    </td>
-                    <td>${formatDate(c.created_at)}</td>
-                    <td>${c.solved ? 'Yes' : 'No'}</td>
-                    <td>${c.solved_at ? formatDate(c.solved_at) : '-'}</td>
-                    <td>${c.solve_duration_minutes !== null ? formatDuration(c.solve_duration_minutes) : '-'}</td>
-                    <td>${taskPills || '<small class="text-muted">No tasks defined</small>'}</td>
-                    <td>
-                        ${c.status === 'running' ? `<button onclick="stopContainer('${c.container_id}')" class="btn btn-danger btn-sm">Stop</button>` : ''}
-                    </td>
+                        <div class="row g-2 mt-2 instance-meta">
+                            <div class="col-md-4"><strong>Instance:</strong> <a href="${url}" target="_blank" class="font-monospace text-decoration-none">${escHtml(c.url)}</a></div>
+                            <div class="col-md-2"><strong>Started:</strong> ${formatDate(c.created_at)}</div>
+                            <div class="col-md-2"><strong>Solved:</strong> ${c.solved ? 'Yes' : 'No'}</div>
+                            <div class="col-md-2"><strong>Solved At:</strong> ${c.solved_at ? formatDate(c.solved_at) : '-'}</div>
+                            <div class="col-md-2"><strong>Time:</strong> ${c.solve_duration_minutes !== null ? formatDuration(c.solve_duration_minutes) : '-'}</div>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover task-table mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 140px;">Task Status</th>
+                                        <th>Exercise Task</th>
+                                        <th>Hint</th>
+                                        <th style="width: 190px;">Completed At</th>
+                                        <th style="width: 140px;">Time Into Exercise</th>
+                                        <th style="width: 110px;">Evidence</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${taskRows}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        function renderTaskRow(task, container) {
+            const completedAt = task.completed_at ? new Date(task.completed_at) : null;
+            const elapsedMinutes = completedAt
+                ? Math.max(0, Math.round((completedAt.getTime() - new Date(container.created_at).getTime()) / 60000))
+                : null;
+            let evidenceButton = '-';
+            if (task.completed) {
+                const evidenceIndex = evidenceItems.push(task) - 1;
+                evidenceButton = `<button onclick="showEvidenceByIndex(${evidenceIndex})" class="btn btn-outline-secondary btn-sm">Details</button>`;
+            }
+
+            return `
+                <tr class="${task.completed ? '' : 'table-warning'}">
+                    <td>${task.completed ? '<span class="badge bg-success">Complete</span>' : '<span class="badge bg-secondary">Pending</span>'}</td>
+                    <td>${escHtml(task.description)}</td>
+                    <td><small class="text-muted">${escHtml(task.hint || '')}</small></td>
+                    <td>${completedAt ? formatDate(completedAt) : '-'}</td>
+                    <td>${elapsedMinutes !== null ? formatDuration(elapsedMinutes) : '-'}</td>
+                    <td>${evidenceButton}</td>
                 </tr>`;
         }
 
@@ -223,8 +236,9 @@
             return c.tasks_total > 0 ? c.tasks_completed / c.tasks_total : 0;
         }
 
-        function showEvidence(taskJson) {
-            const t = JSON.parse(taskJson);
+        function showEvidenceByIndex(index) {
+            const t = evidenceItems[index];
+            if (!t) return;
             let evidenceHtml = '<p class="text-muted mb-0">No evidence recorded.</p>';
             if (t.evidence) {
                 let parsed = t.evidence;
@@ -259,26 +273,54 @@
                 'exercise',
                 'level',
                 'instance_url',
-                'status',
-                'solved',
-                'tasks_completed',
-                'tasks_total',
+                'instance_status',
+                'instance_solved',
+                'instance_tasks_completed',
+                'instance_tasks_total',
                 'started_at',
                 'solved_at',
-                'solve_duration_minutes'
+                'solve_duration_minutes',
+                'task_id',
+                'task_description',
+                'task_completed',
+                'task_completed_at',
+                'task_elapsed_minutes',
+                'task_hint'
             ];
-            const rows = currentRows.map(({ exercise, container }) => [
-                exercise.name,
-                exercise.level,
-                container.url,
-                container.status,
-                container.solved ? 'yes' : 'no',
-                container.tasks_completed,
-                container.tasks_total,
-                container.created_at,
-                container.solved_at || '',
-                container.solve_duration_minutes ?? ''
-            ]);
+            const rows = currentInstances.flatMap(({ exercise, container }) => {
+                const tasks = container.tasks.length ? container.tasks : [{
+                    id: '',
+                    description: '',
+                    completed: false,
+                    completed_at: null,
+                    hint: ''
+                }];
+
+                return tasks.map(task => {
+                    const taskElapsed = task.completed_at
+                        ? Math.max(0, Math.round((new Date(task.completed_at).getTime() - new Date(container.created_at).getTime()) / 60000))
+                        : '';
+
+                    return [
+                        exercise.name,
+                        exercise.level,
+                        container.url,
+                        container.status,
+                        container.solved ? 'yes' : 'no',
+                        container.tasks_completed,
+                        container.tasks_total,
+                        container.created_at,
+                        container.solved_at || '',
+                        container.solve_duration_minutes ?? '',
+                        task.id,
+                        task.description,
+                        task.completed ? 'yes' : 'no',
+                        task.completed_at || '',
+                        taskElapsed,
+                        task.hint || ''
+                    ];
+                });
+            });
             const csv = [headers, ...rows].map(row => row.map(csvCell).join(',')).join('\n');
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
