@@ -5,6 +5,7 @@
     "difficulty": "Easy",
     "automatable": true,
     "description": "The lab exposes a simple condition that can be used to demonstrate task completion.",
+    "target": "/api/check",
     "instructions": "Use this entry as a template. Replace it with a non-revealing candidate instruction for the real lab.",
     "solution": "Implement the first task condition in the application, then call check-completion.sh with goal_1 when the condition is met.",
     "prerequisites": []
@@ -15,6 +16,7 @@
     "difficulty": "Easy",
     "automatable": true,
     "description": "The second task builds on the first and demonstrates multiple tracked completions in one lab.",
+    "target": "Discovery required",
     "instructions": "Use this entry as a template. Describe any allowed tools, required evidence, or special conditions.",
     "solution": "Implement the second task condition in the application, then call check-completion.sh with goal_2 when the condition is met.",
     "prerequisites": ["ch-001"]

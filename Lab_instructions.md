@@ -128,6 +128,7 @@ Use this JSON schema:
       "difficulty",
       "automatable",
       "description",
+      "target",
       "instructions",
       "solution"
     ],
@@ -150,6 +151,10 @@ Use this JSON schema:
       "description": {
         "type": "string",
         "description": "Non-revealing description of the challenge"
+      },
+      "target": {
+        "type": "string",
+        "description": "Non-revealing endpoint, URL, feature, or placeholder where the test case is targeted"
       },
       "instructions": {
         "type": "string",
@@ -181,6 +186,7 @@ Example:
     "difficulty": "Easy",
     "automatable": true,
     "description": "A web endpoint returns user-specific data based on an identifier in the request, but access control may not be properly enforced.",
+    "target": "/api/users/{id}",
     "instructions": "Use only the web UI and browser developer tools. Do not brute-force identifiers.",
     "solution": "Modify the object identifier in the request to access another user's data. The backend does not validate ownership of the requested resource.",
     "prerequisites": []
@@ -191,6 +197,7 @@ Example:
     "difficulty": "Medium",
     "automatable": false,
     "description": "A search feature responds differently depending on whether backend query conditions evaluate to true or false.",
+    "target": "Discovery required",
     "instructions": "Document at least one true condition and one false condition before extracting data.",
     "solution": "Inject boolean conditions into the query and observe differences in responses to infer database content step by step.",
     "prerequisites": ["ch-001"]
@@ -202,6 +209,9 @@ Guidance:
 
 - Use stable IDs like `ch-001` or `sql-login-bypass`.
 - Keep `description` non-revealing. It should help candidates understand the task, not solve it.
+- Use `target` for the endpoint, route, URL, page, API operation, or functionality under test.
+- Keep `target` non-revealing because it may be shown in candidate instructions.
+- Use a placeholder like `"Discovery required"` when naming the target would reveal the solution.
 - Put candidate constraints in `instructions`, such as allowed tools, required evidence, or special setup.
 - Put the full walkthrough in `solution`, including payloads, requests, expected observations, and completion criteria.
 - Use `automatable: true` only when the platform or lab can reliably detect completion without manual review.
@@ -304,8 +314,7 @@ The page auto-refreshes every 10 seconds and shows:
 - One table/block per instance with exercise title, status, progress, started time, solved time, and time-to-solve
 - Individual task rows for each tracked exercise goal
 - A CSV export for offline tracking
-- Completed task pills that open a detail panel with timestamps and evidence
-
+- Completed task pills that open a dete
 **Design your tasks and evidence with this view in mind:**
 - Keep `description` values short and action-oriented — they appear directly on each pill (e.g. `"Identify the injection point"`, not `"SQL injection"`)
 - The `hint` field is shown in the detail panel; use it for the expected technique or tool, not a spoiler
